@@ -19,87 +19,52 @@ def parse_form4_filing(filing) -> List[Dict[str, Any]]:
             return extracted
 
         filing_date = str(getattr(filing, "filing_date", datetime.date.today().isoformat()))
-        
-        # Determine reporting owner name & title
-        owner_name = "Insider"
-        owner_title = "Officer / Director"
-        try:
-            owners = getattr(f4, "reporting_owners", [])
-            if owners and len(owners) > 0:
-                first_owner = owners[0]
-                owner_name = getattr(first_owner, "name", str(first_owner))
-                rel = getattr(first_owner, "relationship", None)
-                if rel:
-                    owner_title = getattr(rel, "officer_title", "") or (
-                        "Director" if getattr(rel, "is_director", False) else
-                        "Officer" if getattr(rel, "is_officer", False) else
-                        "Ten Percent Owner" if getattr(rel, "is_ten_percent_owner", False) else "Insider"
-                    )
-        except Exception:
-            pass
+        insider_name = str(getattr(f4, "insider_name", "") or "Insider")
+        insider_title = str(getattr(f4, "position", "") or "Officer / Director")
+        is_10b5_1 = bool(getattr(f4, "aff10b5_one", False))
 
-        # Check for 10b5-1 affirmation at filing level or footnotes
-        filing_is_10b5_1 = False
-        try:
-            affirmation = getattr(f4, "rule_10b5_1_affirmation", None) or getattr(f4, "rule10b51_affirmation", None)
-            if affirmation is True or str(affirmation).strip() in ("1", "true", "True"):
-                filing_is_10b5_1 = True
-            
-            # Also scan footnotes if available
+        # Check footnotes if 10b5-1 was not directly affirmed
+        if not is_10b5_1:
             footnotes = getattr(f4, "footnotes", {})
             if isinstance(footnotes, dict):
                 for note_text in footnotes.values():
                     if "10b5-1" in str(note_text) or "10b51" in str(note_text):
-                        filing_is_10b5_1 = True
+                        is_10b5_1 = True
                         break
-        except Exception:
-            pass
 
-        # Extract non-derivative transactions
-        txs = getattr(f4, "non_derivative_transactions", [])
-        if not txs:
-            # Fallback to general transactions or dataframe if present
-            txs = getattr(f4, "transactions", [])
+        # Check market_trades or common_stock_purchases/sales
+        trades_df = getattr(f4, "market_trades", None)
+        if trades_df is None or (hasattr(trades_df, "empty") and trades_df.empty):
+            p_df = getattr(f4, "common_stock_purchases", None)
+            s_df = getattr(f4, "common_stock_sales", None)
+            dfs = [d for d in (p_df, s_df) if d is not None and not (hasattr(d, "empty") and d.empty)]
+            if dfs:
+                trades_df = pd.concat(dfs, ignore_index=True)
 
-        # Iterate transactions
-        # If txs is a DataFrame
-        if hasattr(txs, "iterrows"):
-            for _, row in txs.iterrows():
-                code = str(row.get("transaction_code", "") or row.get("TransactionCode", "")).strip().upper()
-                if code == "P":
-                    shares = float(row.get("shares", 0.0) or row.get("Shares", 0.0) or 0.0)
-                    price = float(row.get("price", 0.0) or row.get("Price", 0.0) or 0.0)
-                    total_val = float(row.get("total_value", 0.0) or (shares * price))
-                    
-                    row_10b5_1 = filing_is_10b5_1
-                    if "10b5-1" in str(row).lower():
-                        row_10b5_1 = True
+        if trades_df is not None and hasattr(trades_df, "iterrows") and not trades_df.empty:
+            for _, row in trades_df.iterrows():
+                code = str(row.get("Code", "") or row.get("transaction_code", "")).strip().upper()
+                tx_type = str(row.get("TransactionType", "")).strip().lower()
+
+                # Match Code 'P' (Purchase) or 'S' (Sale)
+                is_buy = (code == "P" or "purchase" in tx_type)
+                is_sell = (code == "S" or "sale" in tx_type)
+
+                if is_buy or is_sell:
+                    tx_code = "P" if is_buy else "S"
+                    tx_type_str = "Purchase" if is_buy else "Sale"
+                    shares = float(row.get("Shares", 0.0) or row.get("shares", 0.0) or 0.0)
+                    price = float(row.get("Price", 0.0) or row.get("price", 0.0) or 0.0)
+                    tx_date = str(row.get("Date", "") or filing_date)
+                    total_val = float(shares * price) if price > 0 else 0.0
 
                     extracted.append({
-                        "filing_date": filing_date,
-                        "insider_name": owner_name,
-                        "insider_title": owner_title,
-                        "transaction_code": "P",
-                        "is_10b5_1": bool(row_10b5_1),
-                        "shares": shares,
-                        "price_per_share": price,
-                        "total_value": total_val,
-                    })
-        elif isinstance(txs, (list, tuple)):
-            for tx in txs:
-                code = str(getattr(tx, "transaction_code", "") or getattr(tx, "security_transaction_code", "")).strip().upper()
-                if code == "P":
-                    shares = float(getattr(tx, "shares", 0.0) or getattr(tx, "transaction_shares", 0.0) or 0.0)
-                    price = float(getattr(tx, "price", 0.0) or getattr(tx, "transaction_price_per_share", 0.0) or 0.0)
-                    total_val = float(getattr(tx, "total_value", 0.0) or (shares * price))
-                    
-                    tx_10b5_1 = filing_is_10b5_1 or getattr(tx, "is_10b5_1", False)
-                    extracted.append({
-                        "filing_date": filing_date,
-                        "insider_name": owner_name,
-                        "insider_title": owner_title,
-                        "transaction_code": "P",
-                        "is_10b5_1": bool(tx_10b5_1),
+                        "filing_date": tx_date,
+                        "insider_name": insider_name,
+                        "insider_title": insider_title,
+                        "transaction_code": tx_code,
+                        "transaction_type": tx_type_str,
+                        "is_10b5_1": is_10b5_1,
                         "shares": shares,
                         "price_per_share": price,
                         "total_value": total_val,
@@ -115,7 +80,7 @@ def fetch_and_cache_insider_data(
 ) -> Tuple[InsiderSummary, List[InsiderTransactionItem]]:
     """
     Fetches recent Form 4 filings for ticker using edgartools.
-    Strictly filters Transaction Code 'P', caches to DB, and returns summary + items.
+    Extracts Code 'P' purchases and Code 'S' sales, caches to DB, and returns summary + items.
     """
     ticker_clean = ticker.strip().upper()
 
@@ -127,40 +92,63 @@ def fetch_and_cache_insider_data(
                 db.query(InsiderTransactionModel)
                 .filter(InsiderTransactionModel.ticker == ticker_clean)
                 .order_by(InsiderTransactionModel.filing_date.desc())
-                .limit(20)
+                .limit(30)
                 .all()
             )
             items: List[InsiderTransactionItem] = []
-            total_val = 0.0
+            buys_count = 0
+            sells_count = 0
+            total_buy_val = 0.0
+            total_sell_val = 0.0
             unique_insiders = set()
-            has_discretionary = False
-            last_date = None
+            has_disc_buy = False
+            has_disc_sell = False
+            last_buy_date = None
+            last_tx_date = None
 
             for r in cached_recs:
+                is_buy = (r.transaction_code == "P")
+                tx_type_str = "Purchase" if is_buy else "Sale"
                 item = InsiderTransactionItem(
                     filing_date=r.filing_date,
                     insider_name=r.insider_name,
                     insider_title=r.insider_title,
                     transaction_code=r.transaction_code,
+                    transaction_type=tx_type_str,
                     is_10b5_1=r.is_10b5_1,
                     shares=r.shares,
                     price_per_share=r.price_per_share,
                     total_value=r.total_value,
                 )
                 items.append(item)
-                total_val += r.total_value
                 unique_insiders.add(r.insider_name)
-                if not r.is_10b5_1:
-                    has_discretionary = True
-                if not last_date:
-                    last_date = r.filing_date
+                if not last_tx_date:
+                    last_tx_date = r.filing_date
+
+                if is_buy:
+                    buys_count += 1
+                    total_buy_val += r.total_value
+                    if not r.is_10b5_1:
+                        has_disc_buy = True
+                    if not last_buy_date:
+                        last_buy_date = r.filing_date
+                else:
+                    sells_count += 1
+                    total_sell_val += r.total_value
+                    if not r.is_10b5_1:
+                        has_disc_sell = True
 
             summary = InsiderSummary(
-                recent_buys_count=len(items),
-                total_buy_value=round(total_val, 2),
+                recent_buys_count=buys_count,
+                total_buy_value=round(total_buy_val, 2),
+                recent_sells_count=sells_count,
+                total_sell_value=round(total_sell_val, 2),
+                net_value=round(total_buy_val - total_sell_val, 2),
                 unique_insiders_count=len(unique_insiders),
-                has_discretionary_buy=has_discretionary,
-                last_buy_date=last_date,
+                has_discretionary_buy=has_disc_buy,
+                has_discretionary_sell=has_disc_sell,
+                last_buy_date=last_buy_date,
+                last_transaction_date=last_tx_date,
             )
             return summary, items
 
@@ -180,69 +168,90 @@ def fetch_and_cache_insider_data(
     except Exception as e:
         logger.warning("Could not fetch EDGAR filings for %s: %s", ticker_clean, e)
 
-    # If new transactions found, refresh SQLite cache for this ticker
-    if parsed_transactions:
-        try:
-            # Clear old records for this ticker
-            db.query(InsiderTransactionModel).filter(InsiderTransactionModel.ticker == ticker_clean).delete()
-            for tx in parsed_transactions:
-                rec = InsiderTransactionModel(
-                    ticker=ticker_clean,
-                    filing_date=tx["filing_date"],
-                    insider_name=tx["insider_name"],
-                    insider_title=tx["insider_title"],
-                    transaction_code="P",
-                    is_10b5_1=tx["is_10b5_1"],
-                    shares=tx["shares"],
-                    price_per_share=tx["price_per_share"],
-                    total_value=tx["total_value"],
-                )
-                db.add(rec)
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            logger.error("Failed to write insider transactions to DB for %s: %s", ticker_clean, e)
+    # Refresh SQLite cache for this ticker
+    try:
+        db.query(InsiderTransactionModel).filter(InsiderTransactionModel.ticker == ticker_clean).delete()
+        for tx in parsed_transactions:
+            rec = InsiderTransactionModel(
+                ticker=ticker_clean,
+                filing_date=tx["filing_date"],
+                insider_name=tx["insider_name"],
+                insider_title=tx["insider_title"],
+                transaction_code=tx["transaction_code"],
+                is_10b5_1=tx["is_10b5_1"],
+                shares=tx["shares"],
+                price_per_share=tx["price_per_share"],
+                total_value=tx["total_value"],
+            )
+            db.add(rec)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error("Failed to write insider transactions to DB for %s: %s", ticker_clean, e)
 
     # Read from DB to return
     cached_recs = (
         db.query(InsiderTransactionModel)
         .filter(InsiderTransactionModel.ticker == ticker_clean)
         .order_by(InsiderTransactionModel.filing_date.desc())
-        .limit(20)
+        .limit(30)
         .all()
     )
 
     items: List[InsiderTransactionItem] = []
-    total_val = 0.0
+    buys_count = 0
+    sells_count = 0
+    total_buy_val = 0.0
+    total_sell_val = 0.0
     unique_insiders = set()
-    has_discretionary = False
-    last_date = None
+    has_disc_buy = False
+    has_disc_sell = False
+    last_buy_date = None
+    last_tx_date = None
 
     for r in cached_recs:
+        is_buy = (r.transaction_code == "P")
+        tx_type_str = "Purchase" if is_buy else "Sale"
         item = InsiderTransactionItem(
             filing_date=r.filing_date,
             insider_name=r.insider_name,
             insider_title=r.insider_title,
             transaction_code=r.transaction_code,
+            transaction_type=tx_type_str,
             is_10b5_1=r.is_10b5_1,
             shares=r.shares,
             price_per_share=r.price_per_share,
             total_value=r.total_value,
         )
         items.append(item)
-        total_val += r.total_value
         unique_insiders.add(r.insider_name)
-        if not r.is_10b5_1:
-            has_discretionary = True
-        if not last_date:
-            last_date = r.filing_date
+        if not last_tx_date:
+            last_tx_date = r.filing_date
+
+        if is_buy:
+            buys_count += 1
+            total_buy_val += r.total_value
+            if not r.is_10b5_1:
+                has_disc_buy = True
+            if not last_buy_date:
+                last_buy_date = r.filing_date
+        else:
+            sells_count += 1
+            total_sell_val += r.total_value
+            if not r.is_10b5_1:
+                has_disc_sell = True
 
     summary = InsiderSummary(
-        recent_buys_count=len(items),
-        total_buy_value=round(total_val, 2),
+        recent_buys_count=buys_count,
+        total_buy_value=round(total_buy_val, 2),
+        recent_sells_count=sells_count,
+        total_sell_value=round(total_sell_val, 2),
+        net_value=round(total_buy_val - total_sell_val, 2),
         unique_insiders_count=len(unique_insiders),
-        has_discretionary_buy=has_discretionary,
-        last_buy_date=last_date,
+        has_discretionary_buy=has_disc_buy,
+        has_discretionary_sell=has_disc_sell,
+        last_buy_date=last_buy_date,
+        last_transaction_date=last_tx_date,
     )
 
     return summary, items

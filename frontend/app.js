@@ -70,6 +70,8 @@ const elements = {
   modalSubtitle: document.getElementById('modalSubtitle'),
   modalDiscretionaryBadge: document.getElementById('modalDiscretionaryBadge'),
   modalTotalValue: document.getElementById('modalTotalValue'),
+  modalTotalSold: document.getElementById('modalTotalSold'),
+  modalNetFlow: document.getElementById('modalNetFlow'),
   modalUniqueCount: document.getElementById('modalUniqueCount'),
   modalPlanType: document.getElementById('modalPlanType'),
   modalTableBody: document.getElementById('modalTableBody'),
@@ -262,18 +264,41 @@ function renderDashboard() {
 
         <!-- Insider Conviction -->
         <td class="py-4 px-3">
-          ${insiderCount > 0 ? `
-            <div class="flex flex-col cursor-pointer" onclick="openInsiderModal('${stock.ticker}')">
-              <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1">
-                ${insiderCount} Buys ($${(insiderVal / 1000).toFixed(0)}k)
-              </span>
-              <span class="text-[10px] ${hasDiscretionary ? 'text-emerald-300 font-medium' : 'text-slate-400'}">
-                ${hasDiscretionary ? '★ Discretionary' : '10b5-1 Plan'}
-              </span>
-            </div>
-          ` : `
-            <span class="text-xs text-slate-500">No recent buys</span>
-          `}
+          ${(() => {
+            const buys = stock.insider?.recent_buys_count || 0;
+            const buyVal = stock.insider?.total_buy_value || 0;
+            const sells = stock.insider?.recent_sells_count || 0;
+            const sellVal = stock.insider?.total_sell_value || 0;
+            const hasDiscBuy = stock.insider?.has_discretionary_buy;
+            const hasDiscSell = stock.insider?.has_discretionary_sell;
+
+            if (buys > 0) {
+              return `
+                <div class="flex flex-col cursor-pointer" onclick="openInsiderModal('${stock.ticker}')">
+                  <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+                    ${buys} Buys ($${(buyVal / 1000).toFixed(0)}k)
+                  </span>
+                  <span class="text-[10px] ${hasDiscBuy ? 'text-emerald-300 font-medium' : 'text-slate-400'}">
+                    ${hasDiscBuy ? '★ Discretionary Buy' : '10b5-1 Plan'}
+                  </span>
+                </div>
+              `;
+            } else if (sells > 0) {
+              const sellStr = sellVal >= 1000000 ? `$${(sellVal / 1000000).toFixed(1)}M` : `$${(sellVal / 1000).toFixed(0)}k`;
+              return `
+                <div class="flex flex-col cursor-pointer" onclick="openInsiderModal('${stock.ticker}')">
+                  <span class="text-xs font-semibold ${hasDiscSell ? 'text-rose-400' : 'text-amber-400'} flex items-center gap-1">
+                    ${sells} Sells (${sellStr})
+                  </span>
+                  <span class="text-[10px] ${hasDiscSell ? 'text-rose-300 font-medium' : 'text-slate-400'}">
+                    ${hasDiscSell ? '⚠ Discretionary' : '10b5-1 Plan'}
+                  </span>
+                </div>
+              `;
+            } else {
+              return `<span class="text-xs text-slate-500">No recent activity</span>`;
+            }
+          })()}
         </td>
 
         <!-- Action -->
@@ -376,28 +401,50 @@ window.openInsiderModal = async function(ticker) {
 
     const summary = data.summary || {};
     const txs = data.transactions || [];
+    const buysCount = summary.recent_buys_count || 0;
+    const sellsCount = summary.recent_sells_count || 0;
+    const buyVal = summary.total_buy_value || 0;
+    const sellVal = summary.total_sell_value || 0;
+    const netVal = summary.net_value !== undefined ? summary.net_value : (buyVal - sellVal);
 
-    elements.modalSubtitle.textContent = `${txs.length} Open-Market Code 'P' Buys in Last 90 Days`;
-    elements.modalTotalValue.textContent = `$${(summary.total_buy_value || 0).toLocaleString()}`;
-    elements.modalUniqueCount.textContent = summary.unique_insiders_count || 0;
-    elements.modalPlanType.textContent = summary.has_discretionary_buy ? 'Yes (Discretionary)' : (txs.length > 0 ? '10b5-1 Only' : 'None');
+    elements.modalSubtitle.textContent = `${txs.length} Form 4 Open-Market Trades in Recent Filings (${buysCount} Buys, ${sellsCount} Sells)`;
+    elements.modalTotalValue.textContent = `$${buyVal.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    if (elements.modalTotalSold) {
+      elements.modalTotalSold.textContent = `$${sellVal.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    }
+    if (elements.modalNetFlow) {
+      elements.modalNetFlow.textContent = `${netVal >= 0 ? '+' : '-'}$${Math.abs(netVal).toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+      elements.modalNetFlow.className = `text-sm font-bold ${netVal > 0 ? 'text-emerald-400' : netVal < 0 ? 'text-rose-400' : 'text-slate-200'}`;
+    }
+
+    let planLabel = 'None';
+    if (summary.has_discretionary_buy) planLabel = '★ Discretionary Buy';
+    else if (summary.has_discretionary_sell) planLabel = '⚠ Discretionary Sell';
+    else if (txs.length > 0) planLabel = 'Rule 10b5-1 Plan';
+    elements.modalPlanType.textContent = planLabel;
 
     if (summary.has_discretionary_buy) {
       elements.modalDiscretionaryBadge.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-      elements.modalDiscretionaryBadge.textContent = '★ High Conviction Discretionary';
-    } else if (txs.length > 0) {
+      elements.modalDiscretionaryBadge.textContent = '★ Discretionary Insider Buying';
+    } else if (buysCount > 0) {
+      elements.modalDiscretionaryBadge.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+      elements.modalDiscretionaryBadge.textContent = 'Insider Buying';
+    } else if (summary.has_discretionary_sell) {
+      elements.modalDiscretionaryBadge.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30';
+      elements.modalDiscretionaryBadge.textContent = '⚠ Discretionary Insider Selling';
+    } else if (sellsCount > 0) {
       elements.modalDiscretionaryBadge.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30';
-      elements.modalDiscretionaryBadge.textContent = 'Rule 10b5-1 Plan';
+      elements.modalDiscretionaryBadge.textContent = 'Rule 10b5-1 Selling Plan';
     } else {
       elements.modalDiscretionaryBadge.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700';
-      elements.modalDiscretionaryBadge.textContent = 'No Recent Buys';
+      elements.modalDiscretionaryBadge.textContent = 'No Recent Activity';
     }
 
     if (txs.length === 0) {
       elements.modalTableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="py-8 text-center text-slate-500">
-            No recent Form 4 open-market purchases (Code 'P') found for ${ticker}.
+          <td colspan="8" class="py-8 text-center text-slate-500">
+            No recent Form 4 open-market transactions found for ${ticker}.
           </td>
         </tr>
       `;
@@ -405,18 +452,26 @@ window.openInsiderModal = async function(ticker) {
     }
 
     elements.modalTableBody.innerHTML = txs.map(tx => {
+      const isBuy = (tx.transaction_code === 'P' || (tx.transaction_type && tx.transaction_type.toLowerCase().includes('buy')));
       const isDiscretionary = !tx.is_10b5_1;
       return `
         <tr class="hover:bg-slate-900/40 transition">
           <td class="py-2.5 px-3 font-mono text-slate-300">${tx.filing_date}</td>
           <td class="py-2.5 px-3 font-medium text-white">${tx.insider_name}</td>
           <td class="py-2.5 px-3 text-slate-400">${tx.insider_title || 'Officer'}</td>
+          <td class="py-2.5 px-3 text-center">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${isBuy ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}">
+              ${isBuy ? 'BUY' : 'SELL'}
+            </span>
+          </td>
           <td class="py-2.5 px-3 text-right font-mono text-slate-300">${Math.round(tx.shares).toLocaleString()}</td>
           <td class="py-2.5 px-3 text-right font-mono text-slate-300">$${tx.price_per_share.toFixed(2)}</td>
-          <td class="py-2.5 px-3 text-right font-mono font-semibold text-emerald-400">$${Math.round(tx.total_value).toLocaleString()}</td>
+          <td class="py-2.5 px-3 text-right font-mono font-semibold ${isBuy ? 'text-emerald-400' : 'text-rose-400'}">
+            $${Math.round(tx.total_value).toLocaleString()}
+          </td>
           <td class="py-2.5 px-3 text-center">
-            <span class="px-2 py-0.5 rounded text-[10px] font-medium border ${isDiscretionary ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}">
-              ${isDiscretionary ? 'Discretionary' : 'Rule 10b5-1'}
+            <span class="px-2 py-0.5 rounded text-[10px] font-medium border ${isDiscretionary ? (isBuy ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30') : 'bg-slate-800 text-slate-400 border-slate-700'}">
+              ${isDiscretionary ? (isBuy ? '★ Discretionary' : '⚠ Discretionary') : 'Rule 10b5-1'}
             </span>
           </td>
         </tr>
@@ -425,7 +480,7 @@ window.openInsiderModal = async function(ticker) {
   } catch (err) {
     elements.modalTableBody.innerHTML = `
       <tr>
-        <td colspan="7" class="py-8 text-center text-rose-400">
+        <td colspan="8" class="py-8 text-center text-rose-400">
           Failed to load insider transactions: ${err.message}
         </td>
       </tr>

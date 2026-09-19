@@ -121,7 +121,8 @@ class InsiderTransactionItem(BaseModel):
     filing_date: str
     insider_name: str
     insider_title: str
-    transaction_code: str = "P"
+    transaction_code: str = "P"  # 'P' for Purchase, 'S' for Sale
+    transaction_type: str = "Purchase"  # "Purchase" or "Sale"
     is_10b5_1: bool
     shares: float
     price_per_share: float
@@ -131,9 +132,14 @@ class InsiderTransactionItem(BaseModel):
 class InsiderSummary(BaseModel):
     recent_buys_count: int = 0
     total_buy_value: float = 0.0
+    recent_sells_count: int = 0
+    total_sell_value: float = 0.0
+    net_value: float = 0.0
     unique_insiders_count: int = 0
     has_discretionary_buy: bool = False
+    has_discretionary_sell: bool = False
     last_buy_date: Optional[str] = None
+    last_transaction_date: Optional[str] = None
 
 
 class SentimentSummary(BaseModel):

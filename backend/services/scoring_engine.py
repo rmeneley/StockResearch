@@ -71,29 +71,38 @@ def normalize_volume(rvol: float, price_change_pct: float) -> float:
 
 
 def normalize_insider(
-    total_buy_value: float,
-    unique_buyers: int,
-    has_discretionary_buy: bool,
-    buy_count: int
+    total_buy_value: float = 0.0,
+    unique_buyers: int = 0,
+    has_discretionary_buy: bool = False,
+    buy_count: int = 0,
+    total_sell_value: float = 0.0,
+    has_discretionary_sell: bool = False,
+    sell_count: int = 0,
 ) -> float:
     """
-    Normalizes SEC Form 4 open-market buys (Code 'P') into [0.0, 1.0].
-    Gives heavy weight to cluster buying and non-10b5-1 (discretionary) conviction.
+    Normalizes SEC Form 4 insider trading into [-1.0, 1.0].
+    - Open-market buys (Code 'P') provide bullish conviction up to +1.0 (emphasizing cluster & discretionary).
+    - Open-market sales (Code 'S') provide bearish conviction down to -1.0 (differentiating discretionary dumps vs. routine 10b5-1 plans).
     """
-    if buy_count == 0 or total_buy_value <= 0:
-        return 0.0
+    buy_score = 0.0
+    if buy_count > 0 and total_buy_value > 0:
+        cluster_component = min(unique_buyers, 3) * 0.133
+        value_component = math.tanh(total_buy_value / 250000.0) * 0.40
+        conviction_component = 0.20 if has_discretionary_buy else 0.05
+        buy_score = cluster_component + value_component + conviction_component
 
-    # Cluster buying signal: up to 3+ insiders buying yields up to 0.40
-    cluster_component = min(unique_buyers, 3) * 0.133  # ~0.40 max
+    sell_penalty = 0.0
+    if sell_count > 0 and total_sell_value > 0:
+        if has_discretionary_sell:
+            # Unplanned discretionary selling carries notable bearish signal
+            val_factor = math.tanh(total_sell_value / 1000000.0) * 0.40
+            sell_penalty = -(0.25 + val_factor)  # up to -0.65
+        else:
+            # Rule 10b5-1 pre-scheduled plans are routine diversification/tax sales; minor drag only
+            sell_penalty = -(math.tanh(total_sell_value / 5000000.0) * 0.10)  # caps at -0.10
 
-    # Dollar value signal: scaled by $250k benchmark
-    value_component = math.tanh(total_buy_value / 250000.0) * 0.40
-
-    # 10b5-1 distinction: discretionary purchases show immediate high conviction
-    conviction_component = 0.20 if has_discretionary_buy else 0.05
-
-    score = cluster_component + value_component + conviction_component
-    return round(max(0.0, min(1.0, score)), 4)
+    net_score = buy_score + sell_penalty
+    return round(max(-1.0, min(1.0, net_score)), 4)
 
 
 def normalize_sentiment(bullish_percent: float, bearish_percent: float) -> float:

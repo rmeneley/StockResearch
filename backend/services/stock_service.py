@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_UNIVERSE = [
     "NVDA",
+    "INTC",
+    "OXY",
     "AAPL",
     "MSFT",
     "AMZN",
@@ -83,10 +85,13 @@ def get_or_update_stock_metric(ticker: str, db: Session, force_refresh: bool = F
     s_tech, _ = normalize_technical(rsi, ema20, ema50, macd_hist, price)
     s_vol = normalize_volume(rvol, price_change)
     s_insider = normalize_insider(
-        insider_summary.total_buy_value,
-        insider_summary.unique_insiders_count,
-        insider_summary.has_discretionary_buy,
-        insider_summary.recent_buys_count,
+        total_buy_value=insider_summary.total_buy_value,
+        unique_buyers=insider_summary.unique_insiders_count,
+        has_discretionary_buy=insider_summary.has_discretionary_buy,
+        buy_count=insider_summary.recent_buys_count,
+        total_sell_value=insider_summary.total_sell_value,
+        has_discretionary_sell=insider_summary.has_discretionary_sell,
+        sell_count=insider_summary.recent_sells_count,
     )
     s_sent = normalize_sentiment(
         sentiment_summary.bullish_percent,

@@ -303,17 +303,21 @@
       <!-- Modal Body -->
       <div class="p-5 overflow-y-auto space-y-4 flex-1">
         <!-- Summary Cards inside Modal -->
-        <div class="grid grid-cols-3 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
           <div>
             <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Purchased</span>
             <span id="modalTotalValue" class="text-sm font-bold text-emerald-400">$0</span>
           </div>
           <div>
-            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Unique Insiders</span>
-            <span id="modalUniqueCount" class="text-sm font-bold text-slate-200">0</span>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Sold</span>
+            <span id="modalTotalSold" class="text-sm font-bold text-rose-400">$0</span>
           </div>
           <div>
-            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Discretionary Trades</span>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Net Insider Flow</span>
+            <span id="modalNetFlow" class="text-sm font-bold text-slate-200">$0</span>
+          </div>
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Plan Conviction</span>
             <span id="modalPlanType" class="text-sm font-bold text-indigo-400">None</span>
           </div>
         </div>
@@ -326,6 +330,7 @@
                 <th class="py-2.5 px-3 text-left">Filing Date</th>
                 <th class="py-2.5 px-3 text-left">Insider</th>
                 <th class="py-2.5 px-3 text-left">Title / Position</th>
+                <th class="py-2.5 px-3 text-center">Type</th>
                 <th class="py-2.5 px-3 text-right">Shares</th>
                 <th class="py-2.5 px-3 text-right">Price</th>
                 <th class="py-2.5 px-3 text-right">Total Value</th>
