@@ -1,0 +1,16 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+yfinance>=0.2.36
+pandas>=2.1.0
+ta>=0.11.0
+numpy>=1.24.0
+edgartools>=2.17.0
+finnhub-python>=2.4.19
+requests>=2.31.0
+httpx>=0.27.0
+sqlalchemy>=2.0.28
+pytest>=8.0.0
+python-dotenv>=1.0.1
+
