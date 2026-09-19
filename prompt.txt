@@ -1,0 +1,37 @@
+You are an expert full-stack Python and financial systems engineer. We are building a Stock Research & Ranking Web Application that scores stocks based on an adjustable multi-factor trading strategy.
+
+### Project Requirements & Stack
+1. Backend: Python with FastAPI, Uvicorn, and Pydantic.
+2. Financial Libraries: 
+   - `yfinance` & `pandas-ta` (technicals: RSI, 20/50 EMAs, MACD histogram, and RVOL).
+   - `edgartools` (SEC Form 4 parsing, focusing strictly on Transaction Code 'P' open-market buys and checking 10b5-1 plans).
+   - Finnhub REST client (for company news sentiment via free API key).
+3. Storage / Caching: Lightweight SQLite database using SQLAlchemy or SQLModel to cache indicator data and avoid hitting API rate limits.
+4. Frontend: A lightweight, responsive dashboard (vanilla JS, Tailwind CSS via CDN, or Alpine.js) served directly by FastAPI static files:
+   - Dynamic strategy sliders (Technical Weight, Insider Conviction Weight, Volume Weight, Sentiment Weight) that sum to 1.0.
+   - An interactive ranking table showing Top Bullish / Top Bearish stocks, current price, composite score, RSI, RVOL, and recent insider buys.
+   - A stock lookup modal or drawer showing recent SEC Form 4 insider transactions.
+
+### Architecture & Folder Structure
+Please set up the repository using this modular structure:
+- `backend/`
+  - `main.py` (FastAPI app & route definitions)
+  - `config.py` (pydantic-settings loading from .env)
+  - `services/`
+    - `technical_service.py` (yfinance + pandas-ta calculation)
+    - `insider_service.py` (edgartools Form 4 parsing)
+    - `sentiment_service.py` (Finnhub API connector)
+    - `scoring_engine.py` (normalizes factors to [-1.0, 1.0] and computes weighted composite score)
+  - `models.py` (SQLite database schemas and Pydantic request/response models)
+- `frontend/`
+  - `index.html`, `app.js`, `styles.css`
+- `requirements.txt`
+- `.env.example`
+- `.gitignore` (ensure .env, __pycache__, and SQLite files are ignored)
+
+### Instructions
+1. PHASE 1 - PLANNING: First, output a clear implementation plan detailing the data flow, normalization logic, and steps. Do NOT write all code files immediately; wait for my sign-off on the plan or proceed step-by-step.
+2. PHASE 2 - ENVIRONMENT & CONFIG: Create `.env.example`, `.gitignore`, and `requirements.txt`. Note: `edgartools` requires `set_identity("Name user@domain.com")`, so expose this as an environment variable (`SEC_EDGAR_IDENTITY`).
+3. PHASE 3 - SCORING SERVICES: Build the data fetching and normalization services with error handling and fallback defaults for missing ticker data or rate limits.
+4. PHASE 4 - FASTAPI & FRONTEND: Wire the backend endpoints (`GET /api/rankings`, `GET /api/insider/{ticker}`, `GET /api/health`) and create the reactive frontend dashboard with the weight adjustment sliders.
+5. PHASE 5 - VERIFICATION: Provide a short verification script or pytest test to validate that scoring math and endpoints work end-to-end.
