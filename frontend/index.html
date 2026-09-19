@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AlphaRadar — Multi-Factor Stock Research & Ranking</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            bullish: '#10b981',
+            bearish: '#f43f5e',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col">
+
+  <!-- Navigation Bar -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <i class="ph-bold ph-chart-line-up text-xl text-white"></i>
+        </div>
+        <div>
+          <span class="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+            AlphaRadar
+          </span>
+          <span class="text-xs text-slate-400 block -mt-1 font-mono">Multi-Factor Quantitative Screener</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <!-- Health status indicator -->
+        <div id="healthBadge" class="hidden sm:flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800/60 border border-slate-700/50 text-xs text-slate-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="healthText">System Connected</span>
+        </div>
+
+        <!-- Refresh Button -->
+        <button id="refreshBtn" class="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 text-sm font-medium transition active:scale-95">
+          <i id="refreshIcon" class="ph-bold ph-arrows-clockwise text-base"></i>
+          <span>Refresh Data</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- KPI Summary Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Top Bullish -->
+      <div class="glass-panel p-4 flex items-center justify-between">
+        <div>
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Top Bullish Pick</span>
+          <h3 id="kpiBullishTicker" class="text-xl font-bold text-emerald-400 mt-1">--</h3>
+          <span id="kpiBullishScore" class="text-xs text-slate-400">Score: --</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+          <i class="ph-fill ph-trend-up text-2xl"></i>
+        </div>
+      </div>
+
+      <!-- Top Bearish -->
+      <div class="glass-panel p-4 flex items-center justify-between">
+        <div>
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Top Bearish Pick</span>
+          <h3 id="kpiBearishTicker" class="text-xl font-bold text-rose-400 mt-1">--</h3>
+          <span id="kpiBearishScore" class="text-xs text-slate-400">Score: --</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+          <i class="ph-fill ph-trend-down text-2xl"></i>
+        </div>
+      </div>
+
+      <!-- Market Conviction -->
+      <div class="glass-panel p-4 flex items-center justify-between">
+        <div>
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Average Sentiment</span>
+          <h3 id="kpiAvgScore" class="text-xl font-bold text-indigo-300 mt-1">--</h3>
+          <span id="kpiMarketTone" class="text-xs text-slate-400">Neutral</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <i class="ph-fill ph-scales text-2xl"></i>
+        </div>
+      </div>
+
+      <!-- Total Tracked -->
+      <div class="glass-panel p-4 flex items-center justify-between">
+        <div>
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Tracked Tickers</span>
+          <h3 id="kpiTrackedCount" class="text-xl font-bold text-white mt-1">10</h3>
+          <span class="text-xs text-slate-400">SQLite Cached</span>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700/50 flex items-center justify-center text-slate-300">
+          <i class="ph-fill ph-database text-2xl"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Strategy Sliders Section -->
+    <div class="glass-panel p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800/80 pb-4">
+        <div>
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <i class="ph-bold ph-sliders-horizontal text-indigo-400"></i>
+            Multi-Factor Strategy Weights
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            Adjust factor allocations dynamically. Real-time ranking re-orders immediately as sliders move.
+          </p>
+        </div>
+
+        <!-- Strategy Presets -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-slate-400 font-medium mr-1">Presets:</span>
+          <button data-preset="balanced" class="preset-btn px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 border border-slate-700/50 transition">
+            Balanced
+          </button>
+          <button data-preset="technicals" class="preset-btn px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 border border-slate-700/50 transition">
+            Technicals Heavy
+          </button>
+          <button data-preset="insider" class="preset-btn px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 border border-slate-700/50 transition">
+            Insider Conviction
+          </button>
+          <button data-preset="volume" class="preset-btn px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 border border-slate-700/50 transition">
+            Volume Breakout
+          </button>
+        </div>
+      </div>
+
+      <!-- Sliders Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+        <!-- Technical Weight Slider -->
+        <div class="space-y-2 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/50">
+          <div class="flex justify-between items-center text-sm">
+            <span class="font-medium text-slate-300 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
+              Technicals (RSI/EMA/MACD)
+            </span>
+            <span id="wTechVal" class="font-mono text-indigo-400 font-semibold text-xs">35%</span>
+          </div>
+          <input id="sliderTech" type="range" min="0" max="100" value="35" class="w-full">
+          <div class="text-[11px] text-slate-400 flex justify-between">
+            <span>RSI(14), EMA20/50, MACD</span>
+            <span id="normTechLabel">0.35</span>
+          </div>
+        </div>
+
+        <!-- Insider Conviction Slider -->
+        <div class="space-y-2 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/50">
+          <div class="flex justify-between items-center text-sm">
+            <span class="font-medium text-slate-300 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+              Insider Conviction (SEC Form 4)
+            </span>
+            <span id="wInsiderVal" class="font-mono text-emerald-400 font-semibold text-xs">25%</span>
+          </div>
+          <input id="sliderInsider" type="range" min="0" max="100" value="25" class="w-full">
+          <div class="text-[11px] text-slate-400 flex justify-between">
+            <span>Code 'P' & 10b5-1 Discretionary</span>
+            <span id="normInsiderLabel">0.25</span>
+          </div>
+        </div>
+
+        <!-- Volume / RVOL Slider -->
+        <div class="space-y-2 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/50">
+          <div class="flex justify-between items-center text-sm">
+            <span class="font-medium text-slate-300 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+              Volume (RVOL & Flow)
+            </span>
+            <span id="wVolVal" class="font-mono text-amber-400 font-semibold text-xs">20%</span>
+          </div>
+          <input id="sliderVol" type="range" min="0" max="100" value="20" class="w-full">
+          <div class="text-[11px] text-slate-400 flex justify-between">
+            <span>Relative Volume 20D SMA</span>
+            <span id="normVolLabel">0.20</span>
+          </div>
+        </div>
+
+        <!-- Sentiment Slider -->
+        <div class="space-y-2 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/50">
+          <div class="flex justify-between items-center text-sm">
+            <span class="font-medium text-slate-300 flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span>
+              News Sentiment (Finnhub)
+            </span>
+            <span id="wSentVal" class="font-mono text-purple-400 font-semibold text-xs">20%</span>
+          </div>
+          <input id="sliderSent" type="range" min="0" max="100" value="20" class="w-full">
+          <div class="text-[11px] text-slate-400 flex justify-between">
+            <span>Bullish vs Bearish News Ratio</span>
+            <span id="normSentLabel">0.20</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table Section Controls: Filter tabs & Add Ticker -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <!-- Tabs -->
+      <div class="flex items-center space-x-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+        <button id="tabAll" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white shadow transition">
+          All Stocks
+        </button>
+        <button id="tabBullish" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition">
+          Top Bullish
+        </button>
+        <button id="tabBearish" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition">
+          Top Bearish
+        </button>
+      </div>
+
+      <!-- Search & Custom Ticker Input -->
+      <div class="flex items-center space-x-3">
+        <!-- Search filter -->
+        <div class="relative">
+          <i class="ph-bold ph-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-sm"></i>
+          <input id="searchInput" type="text" placeholder="Filter tickers..." class="bg-slate-900/90 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-44 transition">
+        </div>
+
+        <!-- Add Ticker -->
+        <form id="addTickerForm" class="flex items-center space-x-1">
+          <input id="newTickerInput" type="text" placeholder="Add ticker (e.g. COIN)" maxlength="6" class="bg-slate-900/90 border border-slate-800 rounded-lg px-3 py-1.5 text-xs uppercase text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-36 transition">
+          <button type="submit" id="addTickerBtn" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 rounded-lg transition active:scale-95 flex items-center space-x-1">
+            <i class="ph-bold ph-plus"></i>
+            <span>Add</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Rankings Table Container -->
+    <div class="glass-panel overflow-hidden border border-slate-800/80">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-800/80 text-left text-sm">
+          <thead class="bg-slate-900/70 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+            <tr>
+              <th scope="col" class="py-3.5 pl-4 pr-2 text-center w-12">#</th>
+              <th scope="col" class="py-3.5 px-3">Ticker / Company</th>
+              <th scope="col" class="py-3.5 px-3">Price & 1D Chg</th>
+              <th scope="col" class="py-3.5 px-3">Composite Score</th>
+              <th scope="col" class="py-3.5 px-3">Factor Breakdown</th>
+              <th scope="col" class="py-3.5 px-3">Technicals</th>
+              <th scope="col" class="py-3.5 px-3">RVOL</th>
+              <th scope="col" class="py-3.5 px-3">Insider Conviction</th>
+              <th scope="col" class="py-3.5 pr-4 pl-2 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="rankingsTableBody" class="divide-y divide-slate-800/50">
+            <!-- Dynamic rows rendered via app.js -->
+            <tr>
+              <td colspan="9" class="py-12 text-center text-slate-500 text-sm">
+                <i class="ph-bold ph-spinner animate-spin text-2xl mb-2 block mx-auto text-indigo-400"></i>
+                Loading multi-factor rankings and indicator metrics...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- SEC Form 4 Insider Modal -->
+  <div id="insiderModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div class="glass-panel modal-enter w-full max-w-3xl max-h-[85vh] flex flex-col bg-slate-900/95 border border-slate-700/80 shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 id="modalTickerTitle" class="text-xl font-bold text-white">NVDA</h3>
+            <span id="modalDiscretionaryBadge" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              Open-Market Buys
+            </span>
+          </div>
+          <p id="modalSubtitle" class="text-xs text-slate-400 mt-1">SEC Form 4 Open-Market Purchases (Code 'P')</p>
+        </div>
+        <button id="closeModalBtn" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto space-y-4 flex-1">
+        <!-- Summary Cards inside Modal -->
+        <div class="grid grid-cols-3 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Purchased</span>
+            <span id="modalTotalValue" class="text-sm font-bold text-emerald-400">$0</span>
+          </div>
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Unique Insiders</span>
+            <span id="modalUniqueCount" class="text-sm font-bold text-slate-200">0</span>
+          </div>
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Discretionary Trades</span>
+            <span id="modalPlanType" class="text-sm font-bold text-indigo-400">None</span>
+          </div>
+        </div>
+
+        <!-- Transactions Table -->
+        <div class="overflow-x-auto border border-slate-800 rounded-lg">
+          <table class="min-w-full divide-y divide-slate-800 text-xs">
+            <thead class="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold text-[10px]">
+              <tr>
+                <th class="py-2.5 px-3 text-left">Filing Date</th>
+                <th class="py-2.5 px-3 text-left">Insider</th>
+                <th class="py-2.5 px-3 text-left">Title / Position</th>
+                <th class="py-2.5 px-3 text-right">Shares</th>
+                <th class="py-2.5 px-3 text-right">Price</th>
+                <th class="py-2.5 px-3 text-right">Total Value</th>
+                <th class="py-2.5 px-3 text-center">10b5-1 Plan</th>
+              </tr>
+            </thead>
+            <tbody id="modalTableBody" class="divide-y divide-slate-800/50">
+              <!-- Loaded dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-500">
+        <span>Rule 10b5-1 checkboxes & footnotes verified via EDGAR.</span>
+        <button id="modalDismissBtn" class="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
