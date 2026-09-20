@@ -78,8 +78,18 @@ def get_or_update_stock_metric(ticker: str, db: Session, force_refresh: bool = F
     # 2. Fetch Form 4 insider buys
     insider_summary, _ = fetch_and_cache_insider_data(ticker_clean, db, force_refresh=force_refresh)
 
-    # 3. Fetch sentiment
+    # 3. Fetch sentiment & latest news
     sentiment_summary = fetch_company_sentiment(ticker_clean)
+    latest_news_time = None
+    latest_news_title = None
+    try:
+        from backend.services.news_service import fetch_company_news
+        news_items = fetch_company_news(ticker_clean, limit=1)
+        if news_items:
+            latest_news_time = news_items[0].published_at
+            latest_news_title = news_items[0].title
+    except Exception as e:
+        logger.debug("Could not fetch latest news item for %s: %s", ticker_clean, e)
 
     # 4. Calculate normalized scores
     s_tech, _ = normalize_technical(rsi, ema20, ema50, macd_hist, price)
@@ -119,6 +129,10 @@ def get_or_update_stock_metric(ticker: str, db: Session, force_refresh: bool = F
     cached.sentiment_score = s_sent
 
     cached.next_earnings_date = tech_data.get("next_earnings_date")
+    if latest_news_time:
+        cached.latest_news_time = latest_news_time
+    if latest_news_title:
+        cached.latest_news_title = latest_news_title
     cached.insider_summary_json = json.dumps(insider_summary.model_dump())
     cached.sentiment_details_json = json.dumps(sentiment_summary.model_dump())
     cached.updated_at = datetime.datetime.utcnow()
@@ -161,6 +175,17 @@ def build_stock_ranking_item(cached: StockMetricCache, weights: StrategyWeights)
         trend_signal=trend_label,
     )
 
+    latest_time = cached.latest_news_time
+    latest_title = cached.latest_news_title
+    if not latest_time:
+        try:
+            from backend.services.news_service import _NEWS_CACHE
+            if cached.ticker in _NEWS_CACHE and _NEWS_CACHE[cached.ticker][1]:
+                latest_time = _NEWS_CACHE[cached.ticker][1][0].published_at
+                latest_title = _NEWS_CACHE[cached.ticker][1][0].title
+        except Exception:
+            pass
+
     return StockRankingItem(
         ticker=cached.ticker,
         company_name=cached.company_name,
@@ -178,6 +203,8 @@ def build_stock_ranking_item(cached: StockMetricCache, weights: StrategyWeights)
         insider=insider,
         sentiment=sentiment,
         next_earnings_date=cached.next_earnings_date,
+        latest_news_time=latest_time,
+        latest_news_title=latest_title,
         updated_at=cached.updated_at.isoformat() if cached.updated_at else "",
     )
 

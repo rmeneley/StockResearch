@@ -38,6 +38,9 @@ def test_api_rankings_default(client):
     assert "rvol" in first
     assert "insider" in first
     assert "sentiment" in first
+    assert "next_earnings_date" in first
+    assert "latest_news_time" in first
+    assert "latest_news_title" in first
 
 def test_api_rankings_custom_weights(client):
     """Ensure custom weights are reflected in rankings response."""

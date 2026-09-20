@@ -72,7 +72,9 @@ const elements = {
   modalSubtitle: document.getElementById('modalSubtitle'),
   modalPriceBadge: document.getElementById('modalPriceBadge'),
   modalDiscretionaryBadge: document.getElementById('modalDiscretionaryBadge'),
+  modalEarningsBadge: document.getElementById('modalEarningsBadge'),
   modalTabNews: document.getElementById('modalTabNews'),
+
   modalTabInsider: document.getElementById('modalTabInsider'),
   modalNewsCountBadge: document.getElementById('modalNewsCountBadge'),
   modalInsiderCountBadge: document.getElementById('modalInsiderCountBadge'),
@@ -146,6 +148,42 @@ function getSignalLabel(score) {
 }
 
 // -----------------------------------------------------------------------------
+// News Read/Unread State Management
+// -----------------------------------------------------------------------------
+
+function isNewsUnread(stock) {
+  if (!stock || !stock.latest_news_time) return false;
+  const readKey = 'read_news_' + stock.ticker;
+  const lastRead = localStorage.getItem(readKey);
+  if (!lastRead) {
+    return true; // Never viewed by user
+  }
+  try {
+    const newsTime = new Date(stock.latest_news_time).getTime();
+    const readTime = new Date(lastRead).getTime();
+    return newsTime > readTime;
+  } catch (e) {
+    return false;
+  }
+}
+
+function markNewsAsRead(ticker) {
+  if (!ticker) return;
+  const stock = state.stocks.find(s => s.ticker === ticker);
+  const ts = (stock && stock.latest_news_time) ? stock.latest_news_time : new Date().toISOString();
+  localStorage.setItem('read_news_' + ticker, ts);
+}
+
+window.handleNewsClick = function(ticker) {
+  markNewsAsRead(ticker);
+  renderDashboard();
+  openTickerModal(ticker, 'news');
+};
+
+window.isNewsUnread = isNewsUnread;
+window.markNewsAsRead = markNewsAsRead;
+
+// -----------------------------------------------------------------------------
 // Rendering Functions
 // -----------------------------------------------------------------------------
 
@@ -197,6 +235,7 @@ function renderDashboard() {
     const scorePct = Math.round(Math.abs(stock.dynamicScore) * 100);
     const isPositive = stock.dynamicScore >= 0;
     const chgPositive = stock.price_change_pct >= 0;
+    const unreadNews = isNewsUnread(stock);
 
     const insiderCount = stock.insider?.recent_buys_count || 0;
     const insiderVal = stock.insider?.total_buy_value || 0;
@@ -212,8 +251,9 @@ function renderDashboard() {
         <!-- Ticker & Company -->
         <td class="py-4 px-3">
           <div class="flex flex-col">
-            <span class="font-bold text-white group-hover:text-indigo-400 transition cursor-pointer flex items-center gap-1.5" onclick="openTickerModal('${stock.ticker}', 'news')" title="View ${stock.ticker} news & articles">
+            <span class="font-bold text-white group-hover:text-indigo-400 transition cursor-pointer flex items-center gap-1.5" onclick="handleNewsClick('${stock.ticker}')" title="View ${stock.ticker} news & articles">
               ${stock.ticker}
+              ${unreadNews ? '<span class="relative flex h-2 w-2" title="New news article available"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>' : ''}
               <i class="ph-bold ph-newspaper text-xs opacity-0 group-hover:opacity-100 transition text-purple-400"></i>
             </span>
             <span class="text-xs text-slate-400 truncate max-w-[140px]" title="${stock.company_name}">
@@ -331,16 +371,16 @@ function renderDashboard() {
 
               const formatted = target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
-              if (diffDays >= 0 && diffDays <= 7) {
+              if (diffDays >= 0 && diffDays <= 12) {
                 return `
                   <div class="flex flex-col">
-                    <span class="text-xs font-bold text-amber-400 font-mono">${formatted}</span>
-                    <span class="text-[10px] text-amber-300 font-semibold flex items-center gap-0.5">
+                    <span class="text-xs font-bold text-rose-500 font-mono">${formatted}</span>
+                    <span class="text-[10px] text-rose-400 font-semibold flex items-center gap-0.5">
                       <i class="ph-bold ph-warning"></i> in ${diffDays === 0 ? 'today' : diffDays + 'd'}
                     </span>
                   </div>
                 `;
-              } else if (diffDays > 7 && diffDays <= 30) {
+              } else if (diffDays > 12 && diffDays <= 30) {
                 return `
                   <div class="flex flex-col">
                     <span class="text-xs font-semibold text-slate-200 font-mono">${formatted}</span>
@@ -357,6 +397,7 @@ function renderDashboard() {
               } else {
                 return `<span class="text-xs text-slate-400 font-mono">${formatted}</span>`;
               }
+
             } catch (e) {
               return `<span class="text-xs text-slate-300 font-mono">${ed}</span>`;
             }
@@ -365,12 +406,22 @@ function renderDashboard() {
 
         <!-- Action -->
         <td class="py-4 pr-4 pl-2 text-right">
-
           <div class="flex items-center justify-end space-x-1.5">
-            <button onclick="openTickerModal('${stock.ticker}', 'news')" class="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-medium transition active:scale-95 inline-flex items-center space-x-1" title="View company news">
-              <i class="ph-bold ph-newspaper"></i>
-              <span class="hidden sm:inline">News</span>
-            </button>
+            ${unreadNews ? `
+              <button onclick="handleNewsClick('${stock.ticker}')" class="px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.35)] text-xs font-semibold transition active:scale-95 inline-flex items-center space-x-1.5 animate-pulse" title="New news article released! Click to view">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <i class="ph-bold ph-newspaper text-emerald-300"></i>
+                <span class="hidden sm:inline font-bold">News</span>
+              </button>
+            ` : `
+              <button onclick="handleNewsClick('${stock.ticker}')" class="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-medium transition active:scale-95 inline-flex items-center space-x-1" title="View company news">
+                <i class="ph-bold ph-newspaper"></i>
+                <span class="hidden sm:inline">News</span>
+              </button>
+            `}
             <button onclick="openTickerModal('${stock.ticker}', 'insider')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition active:scale-95 inline-flex items-center space-x-1" title="View SEC Form 4 filings">
               <i class="ph-bold ph-file-text"></i>
               <span class="hidden sm:inline">Form 4</span>
@@ -526,6 +577,10 @@ window.switchModalTab = function(tab) {
   if (!elements.modalTabNews || !elements.modalTabInsider) return;
 
   if (tab === 'news') {
+    if (state.currentModalTicker) {
+      markNewsAsRead(state.currentModalTicker);
+      renderDashboard();
+    }
     elements.modalTabNews.classList.add('active');
     elements.modalTabNews.classList.remove('text-slate-400', 'border-transparent');
     elements.modalTabInsider.classList.remove('active');
@@ -548,6 +603,10 @@ window.openTickerModal = async function(ticker, defaultTab = 'news') {
   state.currentModalTicker = ticker;
   elements.insiderModal.classList.remove('hidden');
   switchModalTab(defaultTab);
+  if (defaultTab === 'news') {
+    markNewsAsRead(ticker);
+    renderDashboard();
+  }
 
   const stock = state.stocks.find(s => s.ticker === ticker);
   elements.modalTickerTitle.textContent = ticker;
@@ -563,7 +622,35 @@ window.openTickerModal = async function(ticker, defaultTab = 'news') {
     }
   }
 
+  if (elements.modalEarningsBadge) {
+    const ed = stock ? stock.next_earnings_date : null;
+    if (ed) {
+      elements.modalEarningsBadge.classList.remove('hidden');
+      try {
+        const parts = ed.split('T')[0].split('-').map(Number);
+        const target = new Date(parts[0], parts[1] - 1, parts[2]);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const diffDays = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+        const formatted = target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        if (diffDays >= 0 && diffDays <= 12) {
+          elements.modalEarningsBadge.className = 'font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg border bg-rose-500/10 text-rose-500 border-rose-500/30';
+          elements.modalEarningsBadge.textContent = `Earnings: ${formatted} (in ${diffDays === 0 ? 'today' : diffDays + 'd'})`;
+        } else {
+          elements.modalEarningsBadge.className = 'font-mono text-xs font-semibold px-2.5 py-0.5 rounded-lg border bg-slate-800 text-slate-300 border-slate-700';
+          elements.modalEarningsBadge.textContent = `Earnings: ${formatted} (in ${diffDays}d)`;
+        }
+      } catch (e) {
+        elements.modalEarningsBadge.className = 'font-mono text-xs font-semibold px-2.5 py-0.5 rounded-lg border bg-slate-800 text-slate-300 border-slate-700';
+        elements.modalEarningsBadge.textContent = `Earnings: ${ed}`;
+      }
+    } else {
+      elements.modalEarningsBadge.classList.add('hidden');
+    }
+  }
+
   // Reset counters & show loading indicators
+
   if (elements.modalNewsCountBadge) elements.modalNewsCountBadge.textContent = '...';
   if (elements.modalInsiderCountBadge) elements.modalInsiderCountBadge.textContent = '...';
 

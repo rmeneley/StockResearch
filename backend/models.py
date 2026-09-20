@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     Index,
+    text,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.config import settings
@@ -52,6 +53,8 @@ class StockMetricCache(Base):
     insider_summary_json = Column(Text, default="{}")
     sentiment_details_json = Column(Text, default="{}")
     next_earnings_date = Column(String(32), nullable=True)
+    latest_news_time = Column(String(64), nullable=True)
+    latest_news_title = Column(String(256), nullable=True)
 
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
 
@@ -91,6 +94,14 @@ def init_db():
             conn.execute(text("ALTER TABLE stock_metric_cache ADD COLUMN next_earnings_date VARCHAR(32)"))
         except Exception:
             pass  # Already exists
+        try:
+            conn.execute(text("ALTER TABLE stock_metric_cache ADD COLUMN latest_news_time VARCHAR(64)"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE stock_metric_cache ADD COLUMN latest_news_title VARCHAR(256)"))
+        except Exception:
+            pass
 
 
 
@@ -183,6 +194,8 @@ class StockRankingItem(BaseModel):
     insider: InsiderSummary
     sentiment: SentimentSummary
     next_earnings_date: Optional[str] = None
+    latest_news_time: Optional[str] = None
+    latest_news_title: Optional[str] = None
     updated_at: str
 
 
