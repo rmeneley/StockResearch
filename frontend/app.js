@@ -8,6 +8,8 @@ const state = {
   stocks: [],
   activeTab: 'all', // 'all', 'bullish', 'bearish'
   searchQuery: '',
+  activeModalTab: 'news', // 'news', 'insider'
+  currentModalTicker: null,
   weights: {
     tech: 0.35,
     insider: 0.25,
@@ -68,7 +70,18 @@ const elements = {
   modalDismissBtn: document.getElementById('modalDismissBtn'),
   modalTickerTitle: document.getElementById('modalTickerTitle'),
   modalSubtitle: document.getElementById('modalSubtitle'),
+  modalPriceBadge: document.getElementById('modalPriceBadge'),
   modalDiscretionaryBadge: document.getElementById('modalDiscretionaryBadge'),
+  modalTabNews: document.getElementById('modalTabNews'),
+  modalTabInsider: document.getElementById('modalTabInsider'),
+  modalNewsCountBadge: document.getElementById('modalNewsCountBadge'),
+  modalInsiderCountBadge: document.getElementById('modalInsiderCountBadge'),
+  modalPanelNews: document.getElementById('modalPanelNews'),
+  modalPanelInsider: document.getElementById('modalPanelInsider'),
+  modalBullishRatio: document.getElementById('modalBullishRatio'),
+  modalBearishRatio: document.getElementById('modalBearishRatio'),
+  modalSentimentStatus: document.getElementById('modalSentimentStatus'),
+  modalNewsContainer: document.getElementById('modalNewsContainer'),
   modalTotalValue: document.getElementById('modalTotalValue'),
   modalTotalSold: document.getElementById('modalTotalSold'),
   modalNetFlow: document.getElementById('modalNetFlow'),
@@ -78,6 +91,7 @@ const elements = {
   healthBadge: document.getElementById('healthBadge'),
   healthText: document.getElementById('healthText'),
 };
+
 
 // -----------------------------------------------------------------------------
 // Scoring & Calculations
@@ -169,10 +183,11 @@ function renderDashboard() {
   if (filtered.length === 0) {
     elements.tableBody.innerHTML = `
       <tr>
-        <td colspan="9" class="py-8 text-center text-slate-500 text-sm">
+        <td colspan="10" class="py-8 text-center text-slate-500 text-sm">
           No stocks match the selected criteria or search term.
         </td>
       </tr>
+
     `;
     return;
   }
@@ -197,9 +212,9 @@ function renderDashboard() {
         <!-- Ticker & Company -->
         <td class="py-4 px-3">
           <div class="flex flex-col">
-            <span class="font-bold text-white group-hover:text-indigo-400 transition cursor-pointer flex items-center gap-1.5" onclick="openInsiderModal('${stock.ticker}')">
+            <span class="font-bold text-white group-hover:text-indigo-400 transition cursor-pointer flex items-center gap-1.5" onclick="openTickerModal('${stock.ticker}', 'news')" title="View ${stock.ticker} news & articles">
               ${stock.ticker}
-              <i class="ph-bold ph-arrow-up-right text-xs opacity-0 group-hover:opacity-100 transition"></i>
+              <i class="ph-bold ph-newspaper text-xs opacity-0 group-hover:opacity-100 transition text-purple-400"></i>
             </span>
             <span class="text-xs text-slate-400 truncate max-w-[140px]" title="${stock.company_name}">
               ${stock.company_name}
@@ -274,7 +289,7 @@ function renderDashboard() {
 
             if (buys > 0) {
               return `
-                <div class="flex flex-col cursor-pointer" onclick="openInsiderModal('${stock.ticker}')">
+                <div class="flex flex-col cursor-pointer" onclick="openTickerModal('${stock.ticker}', 'insider')">
                   <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1">
                     ${buys} Buys ($${(buyVal / 1000).toFixed(0)}k)
                   </span>
@@ -286,7 +301,7 @@ function renderDashboard() {
             } else if (sells > 0) {
               const sellStr = sellVal >= 1000000 ? `$${(sellVal / 1000000).toFixed(1)}M` : `$${(sellVal / 1000).toFixed(0)}k`;
               return `
-                <div class="flex flex-col cursor-pointer" onclick="openInsiderModal('${stock.ticker}')">
+                <div class="flex flex-col cursor-pointer" onclick="openTickerModal('${stock.ticker}', 'insider')">
                   <span class="text-xs font-semibold ${hasDiscSell ? 'text-rose-400' : 'text-amber-400'} flex items-center gap-1">
                     ${sells} Sells (${sellStr})
                   </span>
@@ -301,14 +316,69 @@ function renderDashboard() {
           })()}
         </td>
 
+        <!-- Next Earnings -->
+        <td class="py-4 px-3">
+          ${(() => {
+            const ed = stock.next_earnings_date;
+            if (!ed) return `<span class="text-xs text-slate-500 font-mono">—</span>`;
+            try {
+              const parts = ed.split('T')[0].split('-').map(Number);
+              const target = new Date(parts[0], parts[1] - 1, parts[2]);
+              const now = new Date();
+              now.setHours(0, 0, 0, 0);
+              const diffTime = target - now;
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              const formatted = target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+              if (diffDays >= 0 && diffDays <= 7) {
+                return `
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-amber-400 font-mono">${formatted}</span>
+                    <span class="text-[10px] text-amber-300 font-semibold flex items-center gap-0.5">
+                      <i class="ph-bold ph-warning"></i> in ${diffDays === 0 ? 'today' : diffDays + 'd'}
+                    </span>
+                  </div>
+                `;
+              } else if (diffDays > 7 && diffDays <= 30) {
+                return `
+                  <div class="flex flex-col">
+                    <span class="text-xs font-semibold text-slate-200 font-mono">${formatted}</span>
+                    <span class="text-[10px] text-indigo-400 font-mono">in ${diffDays}d</span>
+                  </div>
+                `;
+              } else if (diffDays > 30) {
+                return `
+                  <div class="flex flex-col">
+                    <span class="text-xs text-slate-300 font-mono">${formatted}</span>
+                    <span class="text-[10px] text-slate-500 font-mono">in ${diffDays}d</span>
+                  </div>
+                `;
+              } else {
+                return `<span class="text-xs text-slate-400 font-mono">${formatted}</span>`;
+              }
+            } catch (e) {
+              return `<span class="text-xs text-slate-300 font-mono">${ed}</span>`;
+            }
+          })()}
+        </td>
+
         <!-- Action -->
         <td class="py-4 pr-4 pl-2 text-right">
-          <button onclick="openInsiderModal('${stock.ticker}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition active:scale-95 inline-flex items-center space-x-1">
-            <i class="ph-bold ph-file-text"></i>
-            <span>Form 4</span>
-          </button>
+
+          <div class="flex items-center justify-end space-x-1.5">
+            <button onclick="openTickerModal('${stock.ticker}', 'news')" class="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-medium transition active:scale-95 inline-flex items-center space-x-1" title="View company news">
+              <i class="ph-bold ph-newspaper"></i>
+              <span class="hidden sm:inline">News</span>
+            </button>
+            <button onclick="openTickerModal('${stock.ticker}', 'insider')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition active:scale-95 inline-flex items-center space-x-1" title="View SEC Form 4 filings">
+              <i class="ph-bold ph-file-text"></i>
+              <span class="hidden sm:inline">Form 4</span>
+            </button>
+          </div>
         </td>
       </tr>
+
     `;
   }).join('');
 }
@@ -378,22 +448,209 @@ async function checkHealth() {
 }
 
 // -----------------------------------------------------------------------------
-// SEC Form 4 Modal Handler
+// Ticker Research & Detail Modal (News + SEC Form 4)
 // -----------------------------------------------------------------------------
 
-window.openInsiderModal = async function(ticker) {
+function formatTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffSec = Math.floor((now - date) / 1000);
+    if (isNaN(diffSec) || diffSec < 0) return dateStr.split('T')[0] || dateStr;
+    if (diffSec < 60) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+function renderNewsCards(articles) {
+  if (!articles || articles.length === 0) {
+    return `
+      <div class="py-12 text-center text-slate-500">
+        <i class="ph-bold ph-newspaper-clipping text-3xl mb-2 block mx-auto text-slate-600"></i>
+        <p class="text-sm font-medium text-slate-400">No recent news articles found for this company.</p>
+        <p class="text-xs text-slate-600 mt-1">Check back soon as new financial feeds are published.</p>
+      </div>
+    `;
+  }
+
+  return articles.map(art => {
+    const timeAgo = formatTimeAgo(art.published_at);
+    const hasThumb = Boolean(art.thumbnail && art.thumbnail.startsWith('http'));
+    const sentLabel = art.sentiment || 'Neutral';
+    const sentColor = sentLabel === 'Bullish' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' :
+                      sentLabel === 'Bearish' ? 'bg-rose-500/10 text-rose-400 border-rose-500/25' :
+                      'bg-slate-800 text-slate-400 border-slate-700/60';
+
+    return `
+      <div class="news-card flex flex-col sm:flex-row items-start gap-4">
+        ${hasThumb ? `
+          <div class="w-full sm:w-40 h-24 sm:h-24 flex-shrink-0 bg-slate-800 rounded-lg overflow-hidden border border-slate-700/60">
+            <img src="${art.thumbnail}" alt="" class="news-card-thumb" loading="lazy" onerror="this.parentElement.style.display='none'">
+          </div>
+        ` : ''}
+        <div class="flex-1 min-w-0 space-y-1.5 w-full">
+          <div class="flex items-center justify-between text-[11px] text-slate-400 gap-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 font-semibold border border-purple-500/20">
+                ${art.publisher || 'Financial Press'}
+              </span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold border ${sentColor}">
+                ${sentLabel}
+              </span>
+            </div>
+            <span class="font-mono text-slate-500 text-[11px]">${timeAgo}</span>
+          </div>
+          <a href="${art.url}" target="_blank" rel="noopener noreferrer" class="font-bold text-white hover:text-indigo-300 text-sm line-clamp-2 transition flex items-start gap-1 group">
+            <span>${art.title}</span>
+            <i class="ph-bold ph-arrow-up-right text-xs opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition flex-shrink-0 mt-1"></i>
+          </a>
+          ${art.summary ? `
+            <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+              ${art.summary}
+            </p>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.switchModalTab = function(tab) {
+  state.activeModalTab = tab;
+  if (!elements.modalTabNews || !elements.modalTabInsider) return;
+
+  if (tab === 'news') {
+    elements.modalTabNews.classList.add('active');
+    elements.modalTabNews.classList.remove('text-slate-400', 'border-transparent');
+    elements.modalTabInsider.classList.remove('active');
+    elements.modalTabInsider.classList.add('text-slate-400', 'border-transparent');
+
+    elements.modalPanelNews.classList.remove('hidden');
+    elements.modalPanelInsider.classList.add('hidden');
+  } else {
+    elements.modalTabInsider.classList.add('active');
+    elements.modalTabInsider.classList.remove('text-slate-400', 'border-transparent');
+    elements.modalTabNews.classList.remove('active');
+    elements.modalTabNews.classList.add('text-slate-400', 'border-transparent');
+
+    elements.modalPanelInsider.classList.remove('hidden');
+    elements.modalPanelNews.classList.add('hidden');
+  }
+};
+
+window.openTickerModal = async function(ticker, defaultTab = 'news') {
+  state.currentModalTicker = ticker;
   elements.insiderModal.classList.remove('hidden');
+  switchModalTab(defaultTab);
+
+  const stock = state.stocks.find(s => s.ticker === ticker);
   elements.modalTickerTitle.textContent = ticker;
-  elements.modalSubtitle.textContent = `Loading Form 4 transactions for ${ticker}...`;
+  elements.modalSubtitle.textContent = stock ? stock.company_name : `Loading details for ${ticker}...`;
+
+  if (elements.modalPriceBadge) {
+    if (stock) {
+      const chg = stock.price_change_pct;
+      elements.modalPriceBadge.textContent = `$${stock.current_price.toFixed(2)} (${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%)`;
+      elements.modalPriceBadge.className = `font-mono text-xs font-semibold px-2.5 py-0.5 rounded-lg border ${chg >= 0 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/10 text-rose-300 border-rose-500/30'}`;
+    } else {
+      elements.modalPriceBadge.textContent = '';
+    }
+  }
+
+  // Reset counters & show loading indicators
+  if (elements.modalNewsCountBadge) elements.modalNewsCountBadge.textContent = '...';
+  if (elements.modalInsiderCountBadge) elements.modalInsiderCountBadge.textContent = '...';
+
+  elements.modalNewsContainer.innerHTML = `
+    <div class="py-12 text-center text-slate-500 text-sm">
+      <i class="ph-bold ph-spinner animate-spin text-2xl mb-2 block mx-auto text-purple-400"></i>
+      Fetching latest news articles and headlines for ${ticker}...
+    </div>
+  `;
+
   elements.modalTableBody.innerHTML = `
     <tr>
-      <td colspan="7" class="py-8 text-center text-slate-500">
+      <td colspan="8" class="py-8 text-center text-slate-500">
         <i class="ph-bold ph-spinner animate-spin text-xl mb-1 block mx-auto text-indigo-400"></i>
         Parsing SEC Form 4 filings via edgartools...
       </td>
     </tr>
   `;
 
+  // Fetch News and Form 4 in parallel
+  loadTickerNews(ticker, stock);
+  loadTickerInsider(ticker);
+};
+
+window.openInsiderModal = function(ticker) {
+  openTickerModal(ticker, 'insider');
+};
+
+async function loadTickerNews(ticker, stock) {
+  try {
+    const res = await fetch(`/api/news/${ticker}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const articles = data.articles || [];
+
+    if (elements.modalNewsCountBadge) {
+      elements.modalNewsCountBadge.textContent = articles.length;
+    }
+
+    // Calculate live sentiment ratios from loaded articles
+    let bullCount = 0, bearCount = 0, neuCount = 0;
+    articles.forEach(a => {
+      if (a.sentiment === 'Bullish') bullCount++;
+      else if (a.sentiment === 'Bearish') bearCount++;
+      else neuCount++;
+    });
+    const total = articles.length || 1;
+    const bullPct = Math.round(((bullCount + 0.5 * neuCount) / total) * 100);
+    const bearPct = Math.round(((bearCount + 0.5 * neuCount) / total) * 100);
+
+    if (elements.modalBullishRatio) elements.modalBullishRatio.textContent = `${bullPct}%`;
+    if (elements.modalBearishRatio) elements.modalBearishRatio.textContent = `${bearPct}%`;
+    if (elements.modalSentimentStatus) {
+      const net = bullPct - bearPct;
+      let toneText = 'Neutral Balance';
+      let toneColor = 'text-slate-300';
+      if (net >= 25) {
+        toneText = `+${net}% Strong Bullish Bias`;
+        toneColor = 'text-emerald-400';
+      } else if (net > 0) {
+        toneText = `+${net}% Mild Bullish Bias`;
+        toneColor = 'text-emerald-300';
+      } else if (net <= -25) {
+        toneText = `${net}% Strong Bearish Bias`;
+        toneColor = 'text-rose-400';
+      } else if (net < 0) {
+        toneText = `${net}% Mild Bearish Bias`;
+        toneColor = 'text-rose-300';
+      }
+      elements.modalSentimentStatus.textContent = `${toneText} (${articles.length} articles analyzed)`;
+      elements.modalSentimentStatus.className = `text-xs font-semibold ${toneColor}`;
+    }
+
+    elements.modalNewsContainer.innerHTML = renderNewsCards(articles);
+  } catch (err) {
+    if (elements.modalNewsCountBadge) elements.modalNewsCountBadge.textContent = '0';
+    elements.modalNewsContainer.innerHTML = `
+      <div class="py-8 text-center text-rose-400 text-sm">
+        <i class="ph-bold ph-warning text-2xl mb-1 block mx-auto"></i>
+        Failed to load news articles: ${err.message}
+      </div>
+    `;
+  }
+}
+
+
+async function loadTickerInsider(ticker) {
   try {
     const res = await fetch(`/api/insider/${ticker}`);
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
@@ -407,7 +664,10 @@ window.openInsiderModal = async function(ticker) {
     const sellVal = summary.total_sell_value || 0;
     const netVal = summary.net_value !== undefined ? summary.net_value : (buyVal - sellVal);
 
-    elements.modalSubtitle.textContent = `${txs.length} Form 4 Open-Market Trades in Recent Filings (${buysCount} Buys, ${sellsCount} Sells)`;
+    if (elements.modalInsiderCountBadge) {
+      elements.modalInsiderCountBadge.textContent = txs.length;
+    }
+
     elements.modalTotalValue.textContent = `$${buyVal.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
     if (elements.modalTotalSold) {
       elements.modalTotalSold.textContent = `$${sellVal.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
@@ -478,6 +738,7 @@ window.openInsiderModal = async function(ticker) {
       `;
     }).join('');
   } catch (err) {
+    if (elements.modalInsiderCountBadge) elements.modalInsiderCountBadge.textContent = '0';
     elements.modalTableBody.innerHTML = `
       <tr>
         <td colspan="8" class="py-8 text-center text-rose-400">
@@ -486,11 +747,12 @@ window.openInsiderModal = async function(ticker) {
       </tr>
     `;
   }
-};
+}
 
 function closeInsiderModal() {
   elements.insiderModal.classList.add('hidden');
 }
+
 
 // -----------------------------------------------------------------------------
 // Event Listeners

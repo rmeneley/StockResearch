@@ -57,3 +57,20 @@ def test_api_insider_detail(client):
     assert "transactions" in data
     assert isinstance(data["transactions"], list)
 
+
+def test_api_news_detail(client):
+    """Ensure news endpoint returns articles with required fields."""
+    response = client.get("/api/news/AAPL?limit=5")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ticker"] == "AAPL"
+    assert "articles" in data
+    assert isinstance(data["articles"], list)
+    assert data["total_articles"] == len(data["articles"])
+    if len(data["articles"]) > 0:
+        first = data["articles"][0]
+        assert "title" in first
+        assert "publisher" in first
+        assert "url" in first
+
+

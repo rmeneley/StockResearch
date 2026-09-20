@@ -19,6 +19,7 @@ from backend.models import (
     RankingsResponse,
     InsiderDetailResponse,
     HealthResponse,
+    NewsResponse,
 )
 from backend.services.stock_service import (
     DEFAULT_UNIVERSE,
@@ -26,6 +27,8 @@ from backend.services.stock_service import (
     get_or_update_stock_metric,
 )
 from backend.services.insider_service import fetch_and_cache_insider_data
+from backend.services.news_service import fetch_company_news
+
 
 
 @asynccontextmanager
@@ -148,7 +151,32 @@ def get_insider_filings(
     )
 
 
+@app.get("/api/news/{ticker}", response_model=NewsResponse)
+def get_company_news_endpoint(
+    ticker: str,
+    limit: int = Query(15, ge=1, le=50, description="Max news articles to return"),
+    force_refresh: bool = Query(False, description="Force refresh news cache"),
+    db: Session = Depends(get_db),
+):
+    """
+    Fetches latest company news articles for a specific ticker.
+    Returns headline, publisher source, publication timestamp, summary snippet, thumbnail, and URL.
+    """
+    ticker_clean = ticker.strip().upper()
+    cached = db.query(StockMetricCache).filter_by(ticker=ticker_clean).first()
+    company_name = cached.company_name if cached else None
+
+    articles = fetch_company_news(ticker_clean, limit=limit, force_refresh=force_refresh)
+    return NewsResponse(
+        ticker=ticker_clean,
+        company_name=company_name,
+        total_articles=len(articles),
+        articles=articles,
+    )
+
+
 @app.post("/api/ticker/{ticker}")
+
 def add_ticker(
     ticker: str,
     db: Session = Depends(get_db),

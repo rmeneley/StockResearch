@@ -156,6 +156,19 @@ def fetch_technical_data(ticker: str) -> Dict[str, Any]:
         except Exception:
             pass
 
+        # Next earnings date from calendar
+        next_earnings_date = None
+        try:
+            cal = t.calendar
+            if isinstance(cal, dict) and "Earnings Date" in cal:
+                ed = cal["Earnings Date"]
+                if isinstance(ed, list) and len(ed) > 0:
+                    next_earnings_date = str(ed[0])
+                elif ed:
+                    next_earnings_date = str(ed)
+        except Exception:
+            pass
+
         latest_close = float(df["Close"].iloc[-1])
         prev_close = float(df["Close"].iloc[-2]) if len(df) >= 2 else latest_close
         price_change_pct = ((latest_close - prev_close) / prev_close) * 100.0 if prev_close > 0 else 0.0
@@ -167,6 +180,7 @@ def fetch_technical_data(ticker: str) -> Dict[str, Any]:
             "company_name": company_name,
             "current_price": round(latest_close, 2),
             "price_change_pct": round(price_change_pct, 2),
+            "next_earnings_date": next_earnings_date,
             **indicators
         }
     except Exception as e:
@@ -181,6 +195,7 @@ def get_default_technical_data(ticker: str) -> Dict[str, Any]:
         "company_name": ticker.upper(),
         "current_price": 100.0,
         "price_change_pct": 0.0,
+        "next_earnings_date": None,
         "rsi": 50.0,
         "ema_20": 100.0,
         "ema_50": 100.0,
@@ -189,3 +204,4 @@ def get_default_technical_data(ticker: str) -> Dict[str, Any]:
         "macd_hist": 0.0,
         "rvol": 1.0,
     }
+

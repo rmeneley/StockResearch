@@ -118,6 +118,7 @@ def get_or_update_stock_metric(ticker: str, db: Session, force_refresh: bool = F
     cached.insider_score = s_insider
     cached.sentiment_score = s_sent
 
+    cached.next_earnings_date = tech_data.get("next_earnings_date")
     cached.insider_summary_json = json.dumps(insider_summary.model_dump())
     cached.sentiment_details_json = json.dumps(sentiment_summary.model_dump())
     cached.updated_at = datetime.datetime.utcnow()
@@ -176,8 +177,10 @@ def build_stock_ranking_item(cached: StockMetricCache, weights: StrategyWeights)
         technicals=technicals,
         insider=insider,
         sentiment=sentiment,
+        next_earnings_date=cached.next_earnings_date,
         updated_at=cached.updated_at.isoformat() if cached.updated_at else "",
     )
+
 
 
 def get_ranked_stocks(

@@ -264,89 +264,143 @@
               <th scope="col" class="py-3.5 px-3">Technicals</th>
               <th scope="col" class="py-3.5 px-3">RVOL</th>
               <th scope="col" class="py-3.5 px-3">Insider Conviction</th>
+              <th scope="col" class="py-3.5 px-3">Next Earnings</th>
               <th scope="col" class="py-3.5 pr-4 pl-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody id="rankingsTableBody" class="divide-y divide-slate-800/50">
             <!-- Dynamic rows rendered via app.js -->
             <tr>
-              <td colspan="9" class="py-12 text-center text-slate-500 text-sm">
+              <td colspan="10" class="py-12 text-center text-slate-500 text-sm">
                 <i class="ph-bold ph-spinner animate-spin text-2xl mb-2 block mx-auto text-indigo-400"></i>
                 Loading multi-factor rankings and indicator metrics...
               </td>
             </tr>
+
           </tbody>
         </table>
       </div>
     </div>
   </main>
 
-  <!-- SEC Form 4 Insider Modal -->
-  <div id="insiderModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-    <div class="glass-panel modal-enter w-full max-w-3xl max-h-[85vh] flex flex-col bg-slate-900/95 border border-slate-700/80 shadow-2xl overflow-hidden">
+  <!-- Company Research & Detail Modal (News + SEC Form 4 Insider) -->
+  <div id="insiderModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="glass-panel modal-enter w-full max-w-4xl max-h-[90vh] flex flex-col bg-slate-900/95 border border-slate-700/80 shadow-2xl overflow-hidden rounded-2xl">
       <!-- Modal Header -->
-      <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+      <div class="p-5 border-b border-slate-800/90 flex items-center justify-between bg-slate-950/40">
         <div>
-          <div class="flex items-center space-x-2">
-            <h3 id="modalTickerTitle" class="text-xl font-bold text-white">NVDA</h3>
-            <span id="modalDiscretionaryBadge" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              Open-Market Buys
+          <div class="flex items-center space-x-3">
+            <h3 id="modalTickerTitle" class="text-2xl font-extrabold text-white tracking-tight">NVDA</h3>
+            <span id="modalPriceBadge" class="font-mono text-sm font-semibold px-2.5 py-0.5 rounded-lg bg-slate-800/80 text-slate-200 border border-slate-700">
+              $0.00
+            </span>
+            <span id="modalDiscretionaryBadge" class="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              Loading...
             </span>
           </div>
-          <p id="modalSubtitle" class="text-xs text-slate-400 mt-1">SEC Form 4 Open-Market Purchases (Code 'P')</p>
+          <p id="modalSubtitle" class="text-xs text-slate-400 mt-1">Company Overview & Intelligence</p>
         </div>
-        <button id="closeModalBtn" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition">
+        <button id="closeModalBtn" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition" title="Close modal">
           <i class="ph-bold ph-x text-lg"></i>
         </button>
       </div>
 
-      <!-- Modal Body -->
-      <div class="p-5 overflow-y-auto space-y-4 flex-1">
-        <!-- Summary Cards inside Modal -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-          <div>
-            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Purchased</span>
-            <span id="modalTotalValue" class="text-sm font-bold text-emerald-400">$0</span>
+      <!-- Navigation Tabs -->
+      <div class="flex items-center px-5 border-b border-slate-800 bg-slate-950/60 gap-3">
+        <button id="modalTabNews" class="modal-tab-btn active px-4 py-3 border-b-2 font-semibold text-xs flex items-center gap-2 transition" onclick="switchModalTab('news')">
+          <i class="ph-bold ph-newspaper text-sm"></i>
+          <span>Company News & Articles</span>
+          <span id="modalNewsCountBadge" class="px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 font-mono text-[10px]">...</span>
+        </button>
+        <button id="modalTabInsider" class="modal-tab-btn px-4 py-3 border-b-2 font-medium text-xs flex items-center gap-2 text-slate-400 hover:text-slate-200 border-transparent transition" onclick="switchModalTab('insider')">
+          <i class="ph-bold ph-identification-card text-sm"></i>
+          <span>SEC Form 4 Insider Trades</span>
+          <span id="modalInsiderCountBadge" class="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[10px]">...</span>
+        </button>
+      </div>
+
+      <!-- Modal Body (Panels) -->
+      <div class="p-5 overflow-y-auto flex-1 space-y-4">
+        
+        <!-- Panel 1: Company News Articles -->
+        <div id="modalPanelNews" class="space-y-4">
+          <!-- Sentiment Breakdown Header -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Bullish News Ratio</span>
+              <span id="modalBullishRatio" class="text-sm font-bold text-emerald-400 font-mono">50%</span>
+            </div>
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Bearish News Ratio</span>
+              <span id="modalBearishRatio" class="text-sm font-bold text-rose-400 font-mono">50%</span>
+            </div>
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Sentiment Signal</span>
+              <span id="modalSentimentStatus" class="text-xs font-semibold text-purple-300">Neutral</span>
+            </div>
           </div>
-          <div>
-            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Sold</span>
-            <span id="modalTotalSold" class="text-sm font-bold text-rose-400">$0</span>
-          </div>
-          <div>
-            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Net Insider Flow</span>
-            <span id="modalNetFlow" class="text-sm font-bold text-slate-200">$0</span>
-          </div>
-          <div>
-            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Plan Conviction</span>
-            <span id="modalPlanType" class="text-sm font-bold text-indigo-400">None</span>
+
+          <!-- Articles Container -->
+          <div id="modalNewsContainer" class="space-y-3">
+            <div class="py-10 text-center text-slate-500 text-sm">
+              <i class="ph-bold ph-spinner animate-spin text-2xl mb-2 block mx-auto text-purple-400"></i>
+              Loading latest news headlines and articles...
+            </div>
           </div>
         </div>
 
-        <!-- Transactions Table -->
-        <div class="overflow-x-auto border border-slate-800 rounded-lg">
-          <table class="min-w-full divide-y divide-slate-800 text-xs">
-            <thead class="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold text-[10px]">
-              <tr>
-                <th class="py-2.5 px-3 text-left">Filing Date</th>
-                <th class="py-2.5 px-3 text-left">Insider</th>
-                <th class="py-2.5 px-3 text-left">Title / Position</th>
-                <th class="py-2.5 px-3 text-center">Type</th>
-                <th class="py-2.5 px-3 text-right">Shares</th>
-                <th class="py-2.5 px-3 text-right">Price</th>
-                <th class="py-2.5 px-3 text-right">Total Value</th>
-                <th class="py-2.5 px-3 text-center">10b5-1 Plan</th>
-              </tr>
-            </thead>
-            <tbody id="modalTableBody" class="divide-y divide-slate-800/50">
-              <!-- Loaded dynamically -->
-            </tbody>
-          </table>
+        <!-- Panel 2: SEC Form 4 Insider Activity -->
+        <div id="modalPanelInsider" class="space-y-4 hidden">
+          <!-- Summary Cards inside Modal -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Purchased</span>
+              <span id="modalTotalValue" class="text-sm font-bold text-emerald-400">$0</span>
+            </div>
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Total Sold</span>
+              <span id="modalTotalSold" class="text-sm font-bold text-rose-400">$0</span>
+            </div>
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Net Insider Flow</span>
+              <span id="modalNetFlow" class="text-sm font-bold text-slate-200">$0</span>
+            </div>
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Plan Conviction</span>
+              <span id="modalPlanType" class="text-sm font-bold text-indigo-400">None</span>
+            </div>
+          </div>
+
+          <!-- Transactions Table -->
+          <div class="overflow-x-auto border border-slate-800 rounded-xl">
+            <table class="min-w-full divide-y divide-slate-800 text-xs">
+              <thead class="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold text-[10px]">
+                <tr>
+                  <th class="py-2.5 px-3 text-left">Filing Date</th>
+                  <th class="py-2.5 px-3 text-left">Insider</th>
+                  <th class="py-2.5 px-3 text-left">Title / Position</th>
+                  <th class="py-2.5 px-3 text-center">Type</th>
+                  <th class="py-2.5 px-3 text-right">Shares</th>
+                  <th class="py-2.5 px-3 text-right">Price</th>
+                  <th class="py-2.5 px-3 text-right">Total Value</th>
+                  <th class="py-2.5 px-3 text-center">10b5-1 Plan</th>
+                </tr>
+              </thead>
+              <tbody id="modalTableBody" class="divide-y divide-slate-800/50">
+                <!-- Loaded dynamically -->
+              </tbody>
+            </table>
+          </div>
         </div>
+
       </div>
 
       <!-- Modal Footer -->
       <div class="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-500">
-        <span>Rule 10b5-1 checkboxes & footnotes verified via EDGAR.</span>
+        <span class="flex items-center gap-1.5">
+          <i class="ph-bold ph-shield-check text-emerald-400 text-sm"></i>
+          Live news & SEC Form 4 filings verified via financial feeds.
+        </span>
         <button id="modalDismissBtn" class="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition">
           Close
         </button>

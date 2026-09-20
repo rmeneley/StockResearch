@@ -51,6 +51,7 @@ class StockMetricCache(Base):
     # Serialized JSON summaries
     insider_summary_json = Column(Text, default="{}")
     sentiment_details_json = Column(Text, default="{}")
+    next_earnings_date = Column(String(32), nullable=True)
 
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
 
@@ -83,8 +84,16 @@ engine = create_engine(settings.database_url, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
-    """Initializes tables if they do not exist."""
+    """Initializes tables if they do not exist, and ensures schema migrations."""
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("ALTER TABLE stock_metric_cache ADD COLUMN next_earnings_date VARCHAR(32)"))
+        except Exception:
+            pass  # Already exists
+
+
+
 
 def get_db():
     """FastAPI dependency for obtaining a database session."""
@@ -173,7 +182,9 @@ class StockRankingItem(BaseModel):
     technicals: TechnicalSummary
     insider: InsiderSummary
     sentiment: SentimentSummary
+    next_earnings_date: Optional[str] = None
     updated_at: str
+
 
 
 class RankingsResponse(BaseModel):
@@ -195,3 +206,23 @@ class HealthResponse(BaseModel):
     sec_identity_set: bool
     finnhub_configured: bool
     cached_tickers_count: int
+
+
+class NewsArticleItem(BaseModel):
+    title: str
+    publisher: str
+    published_at: str
+    url: str
+    summary: Optional[str] = None
+    thumbnail: Optional[str] = None
+    sentiment: Optional[str] = "Neutral"
+    sentiment_score: Optional[float] = 0.0
+
+
+
+class NewsResponse(BaseModel):
+    ticker: str
+    company_name: Optional[str] = None
+    total_articles: int
+    articles: List[NewsArticleItem]
+
