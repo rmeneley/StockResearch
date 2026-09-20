@@ -15,6 +15,8 @@ from backend.models import (
     init_db,
     get_db,
     StockMetricCache,
+    RemovedTicker,
+    InsiderTransactionModel,
     StrategyWeights,
     RankingsResponse,
     InsiderDetailResponse,
@@ -108,9 +110,13 @@ def get_rankings(
     if tickers:
         ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
     else:
-        # Load from DB existing tickers or fallback to default universe
-        existing = [row[0] for row in db.query(StockMetricCache.ticker).all()]
-        ticker_list = list(dict.fromkeys(existing + DEFAULT_UNIVERSE)) if existing else DEFAULT_UNIVERSE
+        # Load from DB existing tickers or fallback to default universe, excluding removed tickers
+        removed = set(row[0] for row in db.query(RemovedTicker.ticker).all())
+        existing = [row[0] for row in db.query(StockMetricCache.ticker).all() if row[0] not in removed]
+        if not existing and not removed:
+            ticker_list = DEFAULT_UNIVERSE
+        else:
+            ticker_list = existing
 
     ranked = get_ranked_stocks(
         tickers=ticker_list,
@@ -176,7 +182,6 @@ def get_company_news_endpoint(
 
 
 @app.post("/api/ticker/{ticker}")
-
 def add_ticker(
     ticker: str,
     db: Session = Depends(get_db),
@@ -184,6 +189,10 @@ def add_ticker(
     """Adds a custom stock ticker to the tracking universe and initiates metric caching."""
     ticker_clean = ticker.strip().upper()
     try:
+        # If ticker was previously removed, unmark it
+        db.query(RemovedTicker).filter_by(ticker=ticker_clean).delete()
+        db.commit()
+
         cached = get_or_update_stock_metric(ticker_clean, db, force_refresh=True)
         return {
             "status": "success",
@@ -195,6 +204,46 @@ def add_ticker(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to fetch data for ticker {ticker_clean}: {str(e)}",
+        )
+
+
+@app.delete("/api/ticker/{ticker}")
+def remove_ticker(
+    ticker: str,
+    db: Session = Depends(get_db),
+):
+    """Removes a stock ticker from the tracking universe and deletes cached data."""
+    ticker_clean = ticker.strip().upper()
+    try:
+        # 1. Record in RemovedTicker table so it won't be auto-seeded or returned
+        if not db.query(RemovedTicker).filter_by(ticker=ticker_clean).first():
+            db.add(RemovedTicker(ticker=ticker_clean))
+
+        # 2. Delete from StockMetricCache
+        db.query(StockMetricCache).filter_by(ticker=ticker_clean).delete()
+
+        # 3. Delete from InsiderTransactionModel
+        db.query(InsiderTransactionModel).filter_by(ticker=ticker_clean).delete()
+
+        db.commit()
+
+        # 4. Clear in-memory news cache
+        try:
+            from backend.services.news_service import _NEWS_CACHE
+            _NEWS_CACHE.pop(ticker_clean, None)
+        except Exception:
+            pass
+
+        return {
+            "status": "success",
+            "message": f"Ticker {ticker_clean} removed successfully.",
+            "ticker": ticker_clean,
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove ticker {ticker_clean}: {str(e)}",
         )
 
 

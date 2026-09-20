@@ -77,3 +77,37 @@ def test_api_news_detail(client):
         assert "url" in first
 
 
+def test_api_remove_ticker(client):
+    """Ensure removing a ticker deletes it and excludes it from rankings."""
+    from backend.models import SessionLocal, StockMetricCache, RemovedTicker
+    db = SessionLocal()
+    test_ticker = "XYZTEST"
+    try:
+        # Create a test ticker in cache
+        db.query(RemovedTicker).filter_by(ticker=test_ticker).delete()
+        if not db.query(StockMetricCache).filter_by(ticker=test_ticker).first():
+            db.add(StockMetricCache(ticker=test_ticker, company_name="XYZ Test Inc.", current_price=10.0))
+        db.commit()
+
+        # Delete XYZTEST via DELETE endpoint
+        del_res = client.delete(f"/api/ticker/{test_ticker}")
+        assert del_res.status_code == 200
+        data = del_res.json()
+        assert data["status"] == "success"
+        assert data["ticker"] == test_ticker
+
+        # Verify rankings excludes XYZTEST
+        rank_res = client.get("/api/rankings")
+        assert rank_res.status_code == 200
+        returned_tickers = [s["ticker"] for s in rank_res.json()["stocks"]]
+        assert test_ticker not in returned_tickers
+
+        # Verify it is recorded in RemovedTicker
+        assert db.query(RemovedTicker).filter_by(ticker=test_ticker).first() is not None
+    finally:
+        db.query(RemovedTicker).filter_by(ticker=test_ticker).delete()
+        db.query(StockMetricCache).filter_by(ticker=test_ticker).delete()
+        db.commit()
+        db.close()
+
+

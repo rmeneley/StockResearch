@@ -78,6 +78,14 @@ class InsiderTransactionModel(Base):
 Index("idx_insider_ticker_date", InsiderTransactionModel.ticker, InsiderTransactionModel.filing_date)
 
 
+class RemovedTicker(Base):
+    """Tracks tickers explicitly removed by the user so they are not auto-seeded or returned."""
+    __tablename__ = "removed_tickers"
+
+    ticker = Column(String(16), primary_key=True, index=True)
+    removed_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
 # -----------------------------------------------------------------------------
 # Database Setup & Session Factory
 # -----------------------------------------------------------------------------

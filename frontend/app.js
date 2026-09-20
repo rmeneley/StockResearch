@@ -67,6 +67,7 @@ const elements = {
   // Modal
   insiderModal: document.getElementById('insiderModal'),
   closeModalBtn: document.getElementById('closeModalBtn'),
+  modalRemoveBtn: document.getElementById('modalRemoveBtn'),
   modalDismissBtn: document.getElementById('modalDismissBtn'),
   modalTickerTitle: document.getElementById('modalTickerTitle'),
   modalSubtitle: document.getElementById('modalSubtitle'),
@@ -182,6 +183,37 @@ window.handleNewsClick = function(ticker) {
 
 window.isNewsUnread = isNewsUnread;
 window.markNewsAsRead = markNewsAsRead;
+
+window.removeTicker = async function(ticker) {
+  if (!ticker) return;
+  const confirmed = confirm(`Are you sure you want to remove ${ticker} from your dashboard?`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/ticker/${ticker}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || `Failed to remove ticker ${ticker}`);
+      return;
+    }
+
+    // Clean up local read state
+    localStorage.removeItem('read_news_' + ticker);
+
+    // Remove from in-memory stocks list
+    state.stocks = state.stocks.filter(s => s.ticker !== ticker);
+
+    // If the modal was open for this ticker, close it
+    if (state.currentModalTicker === ticker) {
+      closeInsiderModal();
+    }
+
+    // Immediately re-render dashboard table & KPIs
+    renderDashboard();
+  } catch (e) {
+    alert(`Network error removing ticker: ${e.message}`);
+  }
+};
 
 // -----------------------------------------------------------------------------
 // Rendering Functions
@@ -425,6 +457,9 @@ function renderDashboard() {
             <button onclick="openTickerModal('${stock.ticker}', 'insider')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition active:scale-95 inline-flex items-center space-x-1" title="View SEC Form 4 filings">
               <i class="ph-bold ph-file-text"></i>
               <span class="hidden sm:inline">Form 4</span>
+            </button>
+            <button onclick="removeTicker('${stock.ticker}')" class="px-2 py-1 rounded bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/40 text-xs font-medium transition active:scale-90 inline-flex items-center" title="Remove ${stock.ticker} from dashboard">
+              <i class="ph-bold ph-trash"></i>
             </button>
           </div>
         </td>
@@ -923,8 +958,15 @@ function setupEventListeners() {
     loadRankings(true);
   });
 
-  // Modal close handlers
+  // Modal handlers
   elements.closeModalBtn.addEventListener('click', closeInsiderModal);
+  if (elements.modalRemoveBtn) {
+    elements.modalRemoveBtn.addEventListener('click', () => {
+      if (state.currentModalTicker) {
+        removeTicker(state.currentModalTicker);
+      }
+    });
+  }
   elements.modalDismissBtn.addEventListener('click', closeInsiderModal);
   elements.insiderModal.addEventListener('click', (e) => {
     if (e.target === elements.insiderModal) closeInsiderModal();
